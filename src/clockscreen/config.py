@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo, available_timezones
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -12,6 +13,23 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 ScreenKind = Literal["clock", "current", "hourly", "daily"]
 Units = Literal["metric", "imperial"]
 WEATHER_SCREENS: frozenset[str] = frozenset({"current", "hourly", "daily"})
+
+
+@lru_cache(maxsize=1)
+def _zones_by_lower() -> dict[str, str]:
+    return {name.lower(): name for name in available_timezones()}
+
+
+def canonical_timezone(name: str) -> str:
+    """The IANA name as spelled in the zone database: "america/vancouver" -> "America/Vancouver".
+
+    macOS would accept the wrong case (its filesystem ignores case) and the Pi wouldn't, so
+    names are checked against the database rather than by trying to load them.
+    """
+    found = _zones_by_lower().get(name.strip().lower())
+    if found is None:
+        raise ValueError(f"unknown timezone {name!r} (use a name like America/Toronto or Europe/Paris)")
+    return found
 
 
 class ServerConfig(BaseModel):
@@ -80,11 +98,7 @@ class Config(BaseModel):
     @field_validator("timezone")
     @classmethod
     def _valid_tz(cls, tz: str) -> str:
-        try:
-            ZoneInfo(tz)
-        except (ZoneInfoNotFoundError, ValueError) as exc:  # ZoneInfoNotFoundError is a KeyError
-            raise ValueError(f"unknown timezone {tz!r}") from exc
-        return tz
+        return canonical_timezone(tz)
 
     @field_validator("clock", mode="before")
     @classmethod

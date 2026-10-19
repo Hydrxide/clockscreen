@@ -115,6 +115,15 @@ def test_upcoming_hours(forecast):
     assert len(upcoming_hours(forecast, late, step=1)) == 1  # the forecast runs out
 
 
+def test_hour_labels_follow_the_clock_timezone(forecast):
+    # The forecast was parsed in Toronto time; the clock has since moved to Vancouver (3 h behind).
+    vancouver = NOON.astimezone(ZoneInfo("America/Vancouver"))
+    hours = upcoming_hours(forecast, vancouver, step=2)
+    assert [h.time.astimezone(vancouver.tzinfo).hour for h in hours] == [10, 12, 14, 16]
+    with_labels = render("hourly", vancouver, forecast, Settings())
+    assert with_labels.to_bytes() != render("hourly", NOON, forecast, Settings()).to_bytes()
+
+
 def test_every_screen_renders_all_day(forecast):
     for hour in range(24):
         now = datetime(2026, 10, 19, hour, 30, tzinfo=TZ)

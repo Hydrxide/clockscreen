@@ -165,7 +165,9 @@ def _column(c: Canvas, center: int, title: str, kind: str, is_day: bool, lines: 
 def layout_hourly(c: Canvas, now: datetime, f: Forecast, s: Settings) -> None:
     for i, hour in enumerate(upcoming_hours(f, now, s.hour_step)):
         chance = hour.precip_chance or 0
-        _column(c, 16 + i * 32, hour_label(hour.time, s.clock_format), codes.icon_kind(hour.weather_code),
+        # In the clock's timezone, even if the forecast was fetched before a timezone change.
+        label = hour_label(hour.time.astimezone(now.tzinfo), s.clock_format)
+        _column(c, 16 + i * 32, label, codes.icon_kind(hour.weather_code),
                 hour.is_day, [(degrees(hour.temperature), GOLD),
                               (f"{chance}%" if chance >= SHOW_PRECIP_FROM else "", RAIN_BLUE)])
 

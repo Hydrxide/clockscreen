@@ -68,6 +68,25 @@ def test_unusable_saved_choice_is_ignored(tmp_path):
     assert runtime.config.clock.format == "24h"  # the other saved choice still applies
 
 
+async def test_timezone(api_mock, tmp_path):
+    path = tmp_path / "clockscreen-state.json"
+    runtime = Runtime(Config(), state_path=path)
+    await runtime.weather.update()
+    t = 1792425600  # 16:00 UTC
+    assert runtime.local(t).hour == 12  # Toronto, EDT
+
+    await runtime.set_timezone("america/vancouver")  # any case; saved as the database spells it
+    assert runtime.config.timezone == "America/Vancouver" and runtime.local(t).hour == 9
+    assert forecast_calls(api_mock)[-1].request.url.params["timezone"] == "America/Vancouver"
+    assert runtime.weather.place.name == "Toronto"  # the weather location doesn't move with it
+    assert Runtime(Config(), state_path=path).config.timezone == "America/Vancouver"  # kept on restart
+
+    with pytest.raises(ValueError):
+        await runtime.set_timezone("Mars/Olympus")
+    await runtime.set_timezone(None)
+    assert runtime.config.timezone == "America/Toronto"
+
+
 async def test_units_refetch(api_mock):
     runtime = Runtime(Config())
     await runtime.weather.update()
@@ -127,12 +146,18 @@ def test_settings_api(api_mock, tmp_path):
 
     body = api.get("/control/settings").json()
     assert body["clock"] == {"format": "12h", "seconds": False} and body["units"] == "metric"
-    assert body["saved"] == {"clock": False, "units": False, "location": False}
+    assert body["saved"] == {"clock": False, "timezone": False, "units": False, "location": False}
     assert body["config_file"]["location"] == "Toronto"
 
     body = api.put("/control/clock", json={"clock": {"format": "24h", "seconds": True}}).json()
     assert body["clock"] == {"format": "24h", "seconds": True} and body["saved"]["clock"]
     assert api.put("/control/clock", json={"clock": {"format": "25h"}}).status_code == 400
+
+    body = api.put("/control/timezone", json={"timezone": "europe/paris"}).json()
+    assert body["timezone"] == "Europe/Paris" and body["saved"]["timezone"]
+    r = api.put("/control/timezone", json={"timezone": "Mars/Olympus"})
+    assert r.status_code == 400 and "unknown timezone" in r.json()["detail"]
+    assert api.put("/control/timezone", json={"timezone": None}).json()["timezone"] == "America/Toronto"
 
     body = api.put("/control/units", json={"units": "imperial"}).json()
     assert body["units"] == "imperial" and body["last_error"] is None

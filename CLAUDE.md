@@ -21,12 +21,13 @@ A clock and local weather for the user's 128×64 LED panel, as an **HController 
 - **Location:** set in config, anywhere in the world:
   - `name`, geocoded once and cached in `clockscreen-state.json` keyed by the query;
   - or `latitude`/`longitude`, which win over name, and then `name` is only the label, but only if it was set explicitly (`model_fields_set`), so the default "Toronto" never labels someone else's coordinates.
-- **Preview-page settings** (added 2026-10-19 at the user's request): the time format and seconds, the units, and the location (a name or `lat, lon`, plus an optional label).
-  - They're saved in `clockscreen-state.json` under the keys `clock`, `units` and `location`, with one key per choice like nhlscreen, and win over `config.yaml` until **Reset to config**.
+- **Preview-page settings** (added 2026-10-19 at the user's request): the time format and seconds, the timezone, the units, and the location (a name or `lat, lon`, plus an optional label).
+  - They're saved in `clockscreen-state.json` under the keys `clock`, `timezone`, `units` and `location`, with one key per choice like nhlscreen, and win over `config.yaml` until **Reset to config**.
   - `Runtime._effective()` layers them over `file_config.model_dump(exclude_unset=True)`, which keeps the label rule intact.
   - A new location is geocoded before it's saved, so a non-match is a 400 and nothing changes.
   - Units and location changes go through `WeatherService.reconfigure`, which fetches straight away under the service's lock and restarts the loop's wait.
   - The wind label uses `forecast.units`, so a failed refetch after a units change still shows consistent data.
+- **The clock's timezone is separate from the weather location** (the user picked this over "the clock follows the location", 2026-10-19). `timezone` drives the clock, the hourly labels (converted to `now.tzinfo` at draw time) and the forecast's day boundaries, which are refetched on a change. Names are canonicalised against `zoneinfo.available_timezones()` (`config.canonical_timezone`), because macOS would accept the wrong case and the Pi wouldn't.
 - **Docs:** HController's repo gets no doc changes for this module. The setup instructions live only in this README's "Running it on HController" section, written for an outside user on a fresh machine. `tests/test_docs.py` checks its YAML block against the code.
 - Port 9300, and the repo is private (`Hydrxide/clockscreen`).
 

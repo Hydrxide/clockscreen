@@ -40,6 +40,11 @@ def test_yaml_values(tmp_path):
     assert config.location.coordinates == (49.28, -123.12)
 
 
+def test_timezone_spelling_is_canonical():
+    # macOS would load "america/toronto" (case-insensitive disk); the Pi wouldn't.
+    assert Config.model_validate({"timezone": "america/toronto"}).timezone == "America/Toronto"
+
+
 def test_bare_number_clock_format():
     assert Config.model_validate({"clock": {"format": 24}}).clock.format == "24h"
 

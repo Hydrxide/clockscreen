@@ -59,6 +59,10 @@
   .save { background: #2f5fb0; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font: inherit; cursor: pointer; }
   .save:hover { background: #3a6fc8; }
   .save:disabled { opacity: .6; cursor: progress; }
+  .fields.tz { grid-template-columns: minmax(0, 2fr) auto auto; }
+  @media (max-width: 640px) { .fields.tz { grid-template-columns: 1fr; } }
+  .alt { background: #333; color: #ddd; border: 0; border-radius: 6px; padding: 8px 12px; font: inherit; cursor: pointer; }
+  .alt:hover { background: #444; }
   .matched { color: #aaa; font-size: 13px; margin-top: 8px; min-height: 1.4em; }
   .busy { cursor: progress; }
 </style>
@@ -101,6 +105,22 @@
 
     <div class="setting">
       <div class="setting-head">
+        <h3>Timezone</h3>
+        <button class="reset" id="resetTimezone" type="button" hidden>Reset to config</button>
+      </div>
+      <form id="timezoneForm" class="fields tz" novalidate>
+        <label>The clock's timezone
+          <input id="timezoneText" list="timezones" autocomplete="off" spellcheck="false" placeholder="e.g. America/Vancouver">
+        </label>
+        <button class="save" id="saveTimezone" type="submit">Set timezone</button>
+        <button class="alt" id="deviceTimezone" type="button" hidden></button>
+      </form>
+      <datalist id="timezones"></datalist>
+      <div class="matched" id="tzNow"></div>
+    </div>
+
+    <div class="setting">
+      <div class="setting-head">
         <h3 id="units-label">Units</h3>
         <button class="reset" id="resetUnits" type="button" hidden>Reset to config</button>
       </div>
@@ -128,7 +148,9 @@
     </div>
 
     <div class="msg" id="settingsMsg" role="status" aria-live="polite"></div>
-    <p class="hint">Changes apply straight away. They're saved by clockscreen and win over <code>config.yaml</code>
+    <p class="hint">The timezone and the location are separate: the clock (and the hours on the forecast) keep the
+      timezone's time even when the weather is for somewhere else.
+      Changes apply straight away. They're saved by clockscreen and win over <code>config.yaml</code>
       (which HController's dashboard edits) until you press <b>Reset to config</b>. Narrow a place down with a region
       or country after a comma: <i>Portland, OR</i>, <i>London, Ontario</i>. US ZIP codes work; Canadian postal codes
       don't, so use the city or latitude, longitude.</p>
@@ -266,7 +288,33 @@ $('showNow').addEventListener('click', async (ev) => {
 
 const FORMATS = { '12h': '12-hour', '24h': '24-hour' };
 const UNITS = { metric: '°C', imperial: '°F' };
-let settingsBusy = false, locationDirty = false;
+let settingsBusy = false, locationDirty = false, tzDirty = false, clockTz = null, clockFormat = '12h';
+const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+if (Intl.supportedValuesOf) {
+  $('timezones').append(...Intl.supportedValuesOf('timeZone').map((z) => Object.assign(document.createElement('option'), { value: z })));
+}
+
+// Zones that show the same time all year (Toronto and New York) needn't offer a switch.
+function sameClock(a, b) {
+  try {
+    return [0, 182].every((days) => {
+      const when = new Date(Date.now() + days * 86400000);
+      const fmt = (timeZone) => when.toLocaleString('en-CA', { timeZone, hourCycle: 'h23' });
+      return fmt(a) === fmt(b);
+    });
+  } catch (e) { return false; }
+}
+
+function showTzNow() {
+  if (!clockTz) return;
+  let time;
+  try {
+    time = new Date().toLocaleTimeString([], { timeZone: clockTz, hour: 'numeric', minute: '2-digit',
+                                               hourCycle: clockFormat === '24h' ? 'h23' : 'h12' });
+  } catch (e) { time = null; }  // a zone this browser doesn't know
+  $('tzNow').textContent = time ? `The clock shows ${clockTz} time: ${time} now` : `The clock shows ${clockTz} time`;
+}
+setInterval(showTzNow, 1000);
 
 function settingsMsg(text, isError = false) {
   $('settingsMsg').className = isError ? 'msg err' : 'msg';
@@ -281,6 +329,14 @@ function showSettings(st) {
   document.querySelectorAll('input[name=format]').forEach((r) => { r.checked = r.value === st.clock.format; });
   $('seconds').checked = st.clock.seconds;
   document.querySelectorAll('input[name=units]').forEach((r) => { r.checked = r.value === st.units; });
+  clockTz = st.timezone;
+  clockFormat = st.clock.format;
+  if (!tzDirty) $('timezoneText').value = st.timezone;
+  $('resetTimezone').hidden = !st.saved.timezone;
+  $('resetTimezone').textContent = `Reset to config (${st.config_file.timezone})`;
+  $('deviceTimezone').hidden = !deviceTz || sameClock(deviceTz, st.timezone);
+  $('deviceTimezone').textContent = `Use this device's (${deviceTz})`;
+  showTzNow();
   if (!locationDirty) {
     $('locationText').value = st.location.text;
     $('locationLabel').value = st.location.label || '';
@@ -303,14 +359,16 @@ async function putSetting(path, body, pending, done) {
   if (settingsBusy) return;
   settingsBusy = true;
   $('settings').classList.add('busy');
-  $('saveLocation').disabled = true;
+  document.querySelectorAll('#settings .save').forEach((b) => { b.disabled = true; });
   settingsMsg(pending);
   try {
     const r = await fetch(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const st = await r.json();
     if (!r.ok) throw new Error(st.detail || r.statusText);
     if (path === '/control/location') locationDirty = false;
+    if (path === '/control/timezone') tzDirty = false;
     showSettings(st);
+    if (typeof done === 'function') done = done(st);
     settingsMsg(st.last_error ? `${done}, but the forecast didn't load: ${st.last_error}` : done, !!st.last_error);
   } catch (e) {
     settingsMsg(e.message, true);
@@ -318,7 +376,7 @@ async function putSetting(path, body, pending, done) {
   } finally {
     settingsBusy = false;
     $('settings').classList.remove('busy');
-    $('saveLocation').disabled = false;
+    document.querySelectorAll('#settings .save').forEach((b) => { b.disabled = false; });
   }
 }
 
@@ -332,6 +390,22 @@ document.querySelectorAll('input[name=format]').forEach((r) => r.addEventListene
 $('seconds').addEventListener('change', putClock);
 document.querySelectorAll('input[name=units]').forEach((r) => r.addEventListener('change', () =>
   putSetting('/control/units', { units: r.value }, `Fetching the forecast in ${UNITS[r.value]}…`, `Units: ${UNITS[r.value]}`)));
+
+$('timezoneText').addEventListener('input', () => { tzDirty = true; });
+$('timezoneForm').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const timezone = $('timezoneText').value.trim();
+  if (!timezone) { settingsMsg('Enter a timezone such as America/Toronto', true); return; }
+  putSetting('/control/timezone', { timezone }, 'Saving…', (st) => `Timezone: ${st.timezone}`);
+});
+$('deviceTimezone').addEventListener('click', () => {
+  tzDirty = false;
+  putSetting('/control/timezone', { timezone: deviceTz }, 'Saving…', `Timezone: ${deviceTz}`);
+});
+$('resetTimezone').addEventListener('click', () => {
+  tzDirty = false;
+  putSetting('/control/timezone', { timezone: null }, 'Saving…', 'Timezone: back to config.yaml');
+});
 
 ['locationText', 'locationLabel'].forEach((id) => $(id).addEventListener('input', () => { locationDirty = true; }));
 $('locationForm').addEventListener('submit', (ev) => {

@@ -1,6 +1,6 @@
 """Wires the config, the weather service and the cycle; draws the frame for a moment.
 
-The preview page can change the clock format, units and location. Those choices are saved
+The preview page can change the clock format, timezone, units and location. Those choices are saved
 in clockscreen-state.json, one key each, and win over config.yaml until they're reset
 (the same rule as nhlscreen's team and player choices).
 """
@@ -16,7 +16,7 @@ from typing import Any, Callable, get_args
 
 from pydantic import ValidationError
 
-from .config import ClockConfig, Config, LocationConfig, ScreenKind, Units
+from .config import ClockConfig, Config, LocationConfig, ScreenKind, Units, canonical_timezone
 from .poller import WeatherService
 from .render import Canvas, Settings, render
 from .rotation import pick
@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 
 SCREENS: tuple[str, ...] = get_args(ScreenKind)
 SHOW_NOW_SECONDS = 30.0
-SAVED = ("clock", "units", "location")  # config sections the preview page can override
+SAVED = ("clock", "timezone", "units", "location")  # config keys the preview page can override
 
 _COORDINATES = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$")
 
@@ -96,6 +96,16 @@ class Runtime:
         self._save("clock", None if clock is None else ClockConfig.model_validate(clock).model_dump())
         self.weather.config = self.config  # nothing to fetch; keeps the label in step
 
+    async def set_timezone(self, tz: str | None) -> None:
+        """An IANA name for the clock (any case); None = back to config.yaml. Raises ValueError.
+
+        The clock and the weather location are separate on purpose: the board shows its own
+        time even when the weather is for somewhere else. The forecast is fetched again, since
+        its days begin and end in this timezone.
+        """
+        self._save("timezone", None if tz is None else canonical_timezone(tz))
+        await self.weather.reconfigure(self.config)
+
     async def set_units(self, units: str | None) -> None:
         """"metric" or "imperial", then fetch the forecast in them; None = back to config.yaml."""
         if units is not None and units not in get_args(Units):
@@ -122,12 +132,14 @@ class Runtime:
         c, f, w = self.config, self.file_config, self.weather
         return {
             "clock": c.clock.model_dump(),
+            "timezone": c.timezone,
             "units": c.units,
             "location": {"text": location_text(c.location), "label": c.location.label},
             "place": w.place.describe() if w.place else None,
             "label": w.label,
             "saved": {key: self.state.get(key) is not None for key in SAVED},
-            "config_file": {"clock": f.clock.model_dump(), "units": f.units, "location": location_text(f.location)},
+            "config_file": {"clock": f.clock.model_dump(), "timezone": f.timezone, "units": f.units,
+                            "location": location_text(f.location)},
             "last_error": w.last_error,
         }
 

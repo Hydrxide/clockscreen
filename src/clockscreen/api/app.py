@@ -6,8 +6,9 @@
   GET  /screen             which screen is on, why, for how long, and what it shows
   GET  /weather            the forecast (null until the first fetch)
   POST /control/show       {"screen": "hourly"} hold it for 30 s; {"screen": null} resume the cycle
-  GET  /control/settings   clock format, units and location in use, and which are saved over config.yaml
+  GET  /control/settings   clock format, timezone, units and location in use, and which are saved over config.yaml
   PUT  /control/clock      {"clock": {"format": "24h", "seconds": true}}; {"clock": null} back to config.yaml
+  PUT  /control/timezone   {"timezone": "America/Vancouver"}; {"timezone": null} back to config.yaml
   PUT  /control/units      {"units": "imperial"}; {"units": null} back to config.yaml
   PUT  /control/location   {"location": "Paris, France", "label": null} or "43.65, -79.38"; null back to config.yaml
   GET  /                   browser preview of the panel, with Show now buttons and the settings
@@ -39,6 +40,10 @@ class ShowRequest(BaseModel):
 
 class ClockRequest(BaseModel):
     clock: dict[str, Any] | None  # {"format": "12h" | "24h", "seconds": bool}; None = back to config.yaml
+
+
+class TimezoneRequest(BaseModel):
+    timezone: str | None  # an IANA name such as America/Toronto; None = back to config.yaml
 
 
 class UnitsRequest(BaseModel):
@@ -165,6 +170,14 @@ def create_app(runtime: Runtime, manage_lifecycle: bool = True) -> FastAPI:
     def set_clock(req: ClockRequest) -> dict[str, Any]:
         try:
             runtime.set_clock(req.clock)
+        except ValueError as exc:
+            raise HTTPException(400, _reason(exc)) from exc
+        return runtime.settings_state()
+
+    @app.put("/control/timezone")
+    async def set_timezone(req: TimezoneRequest) -> dict[str, Any]:
+        try:
+            await runtime.set_timezone(req.timezone)
         except ValueError as exc:
             raise HTTPException(400, _reason(exc)) from exc
         return runtime.settings_state()
