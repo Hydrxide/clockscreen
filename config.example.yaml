@@ -1,0 +1,41 @@
+# Copy to config.yaml and edit. Every key is optional; defaults are shown.
+
+timezone: America/Toronto   # the clock, and where the forecast's days start and end
+
+server:
+  host: 127.0.0.1     # use 0.0.0.0 to let other devices on your LAN open the preview page
+  port: 9300          # HController's url for this app must use the same port
+
+# Where "local" weather is for: anywhere in the world.
+location:
+  # Looked up once through Open-Meteo's geocoding, then remembered. Narrow it down with a
+  # region or country after a comma: "Portland, OR", "Paris, France", "London, Ontario".
+  # US ZIP codes work; Canadian postal codes don't (use the city, or latitude/longitude).
+  name: Toronto
+  # Set both to skip the lookup; name is then only used as the label.
+  # latitude: 43.6532
+  # longitude: -79.3832
+  # label: HOME       # text on the weather screens (default: the place's name)
+
+units: metric         # metric (°C, km/h) | imperial (°F, mph)
+
+clock:
+  format: 12h         # 12h (shows AM/PM) | 24h
+  seconds: false      # true: show seconds next to the time
+
+weather:
+  refresh_minutes: 15 # how often to fetch the forecast (min 5)
+  hour_step: 2        # hourly screen: 4 columns, this many hours apart (1-6)
+
+# What the panel cycles through, in order, for `dwell` seconds each. Screens can repeat,
+# e.g. put the clock between every weather screen. Weather screens are skipped until the
+# first forecast arrives, and if it's more than 3 hours old.
+#   clock    the time and date
+#   current  current conditions: temperature, feels-like, today's high/low, wind
+#   hourly   the next few hours
+#   daily    the next three days
+cycle:
+  - {screen: clock, dwell: 20}
+  - {screen: current, dwell: 10}
+  - {screen: hourly, dwell: 8}
+  - {screen: daily, dwell: 8}

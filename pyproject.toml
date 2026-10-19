@@ -1,0 +1,41 @@
+[project]
+name = "clockscreen"
+version = "0.1.0"
+description = "Clock and local weather for a 128x64 LED panel, as an HController module"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pydantic>=2.6",
+    "pyyaml>=6",
+    "tzdata; sys_platform == 'win32'",  # Windows has no IANA zone database for zoneinfo
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+]
+
+[project.scripts]
+clockscreen = "clockscreen.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+clockscreen = ["api/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    # Starlette's TestClient warns about its httpx usage; nothing to act on here.
+    "ignore::DeprecationWarning:starlette.*",
+]
