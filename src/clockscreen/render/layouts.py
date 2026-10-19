@@ -30,7 +30,6 @@ class Settings:
 
     clock_format: str = "12h"
     seconds: bool = False
-    units: str = "metric"
     hour_step: int = 2
     label: str = ""
 
@@ -141,7 +140,7 @@ def layout_current(c: Canvas, now: datetime, f: Forecast, s: Settings) -> None:
     if today:
         pairs(c, 2, bottom, [("H ", WHITE), (degrees(today.high), GOLD), ("  L ", WHITE), (degrees(today.low), GOLD)])
     wind = [(f"{compass(cur.wind_direction)} ".lstrip(), WHITE), (f"{round(cur.wind_speed)}", GOLD),
-            (f" {wind_unit(s.units)}", WHITE)]
+            (f" {wind_unit(f.units)}", WHITE)]  # the forecast's own units, which lag a units change
     pairs(c, WIDTH - 1 - pairs_width(wind), bottom, wind)
 
 

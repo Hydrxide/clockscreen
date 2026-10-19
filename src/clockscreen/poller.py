@@ -1,7 +1,8 @@
 """Keeps the forecast fresh: find the location once, then fetch every ``refresh_minutes``.
 
 A failed fetch keeps the last good forecast and retries after 30 s, doubling up to the
-refresh interval. The clock never waits on any of this.
+refresh interval. The clock never waits on any of this. ``reconfigure`` (a new location
+or units from the preview page) fetches straight away and restarts the wait.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from .config import Config
+from .config import Config, LocationConfig
 from .state import State
 from .weather.client import WeatherClient, WeatherError
 from .weather.models import Forecast, Place
@@ -37,6 +38,9 @@ class WeatherService:
         self.next_attempt_at: datetime | None = None
         self._failures = 0
         self._task: asyncio.Task | None = None
+        self._lock = asyncio.Lock()  # one fetch at a time: the loop's or reconfigure's
+        self._wake = asyncio.Event()
+        self._next_delay = 0.0
 
     @property
     def refresh_seconds(self) -> float:
@@ -55,8 +59,9 @@ class WeatherService:
     def fresh(self, now: datetime) -> bool:
         return self.forecast is not None and now - self.forecast.fetched_at <= STALE_AFTER
 
-    async def resolve_place(self) -> Place:
-        loc = self.config.location
+    async def resolve_place(self, loc: LocationConfig | None = None) -> Place:
+        """The place for ``loc`` (default: the current config's). Raises LocationNotFound."""
+        loc = loc or self.config.location
         if loc.coordinates is not None:
             # No lookup: a name set alongside the coordinates is only the label.
             name = loc.name if "name" in loc.model_fields_set and loc.name else ""
@@ -99,11 +104,33 @@ class WeatherService:
         self.last_error = None
         return self.refresh_seconds
 
-    async def _run(self) -> None:
-        while True:
+    async def _locked_update(self) -> float:
+        async with self._lock:
+            return await self.update()
+
+    async def reconfigure(self, config: Config, place: Place | None = None) -> None:
+        """Switch to ``config`` and fetch now. A new location drops the old place's forecast;
+        new units keep it until the new one arrives (each forecast knows its own units)."""
+        async with self._lock:
+            if place is not None or config.location != self.config.location:
+                self.place, self.forecast = place, None
+            self.config = config
+            self._failures = 0
             delay = await self.update()
+        self._next_delay = delay
+        self._wake.set()
+
+    async def _run(self) -> None:
+        delay = await self._locked_update()
+        while True:
             self.next_attempt_at = datetime.now(timezone.utc) + timedelta(seconds=delay)
-            await asyncio.sleep(delay)
+            self._wake.clear()
+            try:
+                await asyncio.wait_for(self._wake.wait(), delay)
+            except TimeoutError:
+                delay = await self._locked_update()
+            else:
+                delay = self._next_delay  # reconfigure() just fetched: start the wait over
 
     def start(self) -> None:
         self._task = asyncio.create_task(self._run())

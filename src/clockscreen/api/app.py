@@ -6,7 +6,11 @@
   GET  /screen             which screen is on, why, for how long, and what it shows
   GET  /weather            the forecast (null until the first fetch)
   POST /control/show       {"screen": "hourly"} hold it for 30 s; {"screen": null} resume the cycle
-  GET  /                   browser preview of the panel, with Show now buttons
+  GET  /control/settings   clock format, units and location in use, and which are saved over config.yaml
+  PUT  /control/clock      {"clock": {"format": "24h", "seconds": true}}; {"clock": null} back to config.yaml
+  PUT  /control/units      {"units": "imperial"}; {"units": null} back to config.yaml
+  PUT  /control/location   {"location": "Paris, France", "label": null} or "43.65, -79.38"; null back to config.yaml
+  GET  /                   browser preview of the panel, with Show now buttons and the settings
 """
 
 from __future__ import annotations
@@ -16,19 +20,40 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from ..render.layouts import clock_parts, date_text, upcoming_hours
 from ..runtime import SCREENS, SHOW_NOW_SECONDS, Runtime
 from ..weather import codes
+from ..weather.client import LocationNotFound, WeatherError
 
 _PREVIEW_HTML = Path(__file__).with_name("preview.html")
 
 
 class ShowRequest(BaseModel):
     screen: str | None  # one of clock/current/hourly/daily; None = back to the cycle
+
+
+class ClockRequest(BaseModel):
+    clock: dict[str, Any] | None  # {"format": "12h" | "24h", "seconds": bool}; None = back to config.yaml
+
+
+class UnitsRequest(BaseModel):
+    units: str | None  # metric | imperial; None = back to config.yaml
+
+
+class LocationRequest(BaseModel):
+    location: str | None  # a place name, or "latitude, longitude"; None = back to config.yaml
+    label: str | None = None  # text on the weather screens (default: the place's name)
+
+
+def _reason(exc: ValueError) -> str:
+    if isinstance(exc, ValidationError):
+        return "; ".join(e["msg"].removeprefix("Value error, ") for e in exc.errors())
+    return str(exc)
 
 
 def _iso(value: datetime | None) -> str | None:
@@ -131,6 +156,38 @@ def create_app(runtime: Runtime, manage_lifecycle: bool = True) -> FastAPI:
             raise HTTPException(400, str(exc)) from exc
         screen, left, source = runtime.screen()
         return {"screen": screen, "source": source, "seconds_left": round(left, 1)}
+
+    @app.get("/control/settings")
+    def get_settings() -> dict[str, Any]:
+        return runtime.settings_state()
+
+    @app.put("/control/clock")
+    def set_clock(req: ClockRequest) -> dict[str, Any]:
+        try:
+            runtime.set_clock(req.clock)
+        except ValueError as exc:
+            raise HTTPException(400, _reason(exc)) from exc
+        return runtime.settings_state()
+
+    @app.put("/control/units")
+    async def set_units(req: UnitsRequest) -> dict[str, Any]:
+        try:
+            await runtime.set_units(req.units)
+        except ValueError as exc:
+            raise HTTPException(400, _reason(exc)) from exc
+        return runtime.settings_state()
+
+    @app.put("/control/location")
+    async def set_location(req: LocationRequest) -> dict[str, Any]:
+        try:
+            await runtime.set_location(req.location, req.label)
+        except LocationNotFound as exc:
+            raise HTTPException(400, f"{exc}; try adding a region or country after a comma") from exc
+        except ValueError as exc:
+            raise HTTPException(400, _reason(exc)) from exc
+        except (WeatherError, httpx.HTTPError) as exc:
+            raise HTTPException(502, f"couldn't look the place up: {exc or type(exc).__name__}") from exc
+        return runtime.settings_state()
 
     @app.get("/", response_class=HTMLResponse)
     def preview() -> str:

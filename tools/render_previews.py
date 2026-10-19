@@ -64,7 +64,7 @@ def cases() -> dict[str, Canvas]:
         "current": render("current", noon, rec, toronto),
         "current_cold_storm": render("current", night, extreme(night, -25, 96), Settings(label="Yellowknife")),
         "current_hot_imperial": render("current", noon, extreme(noon, 104, 0, units="imperial", is_day=True),
-                                       Settings(units="imperial", label="Phoenix")),
+                                       Settings(label="Phoenix")),
         "current_long_text": render("current", night, extreme(night, -8, 56), Settings(label="Saint-Jean-sur-Richelieu")),
         "hourly": render("hourly", noon, rec, toronto),
         "hourly_24h_worst": render("hourly", night, extreme(night, -25, 75), Settings(clock_format="24h")),

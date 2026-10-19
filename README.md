@@ -23,7 +23,7 @@ cp config.example.yaml config.yaml     # optional: it runs on the defaults witho
 
 On Windows, use `.venv\Scripts\` in place of `.venv/bin/`. Python 3.11 or newer is required.
 
-The preview page draws exactly what the panel shows, as LED dots, with **Show now** buttons and the forecast's status. To use it as a module, stop it again (Ctrl+C) and let HController run it. HController won't start a second copy while this one holds the port.
+The preview page draws exactly what the panel shows, as LED dots. It also has **Show now** buttons, the forecast's status, and **Settings** for the time format, units and location (see [Settings on the preview page](#settings-on-the-preview-page)). To use it as a module, stop it again (Ctrl+C) and let HController run it. HController won't start a second copy while this one holds the port.
 
 ## Running it on HController
 
@@ -78,7 +78,11 @@ display:
 
 Quote the times. `days` can also be `weekdays`, `weekends` or a list like `[sat, sun]`, and a window can set its own `brightness`.
 
-**5. Set it up from the dashboard.** Open the card's **Config file** editor to set the location, units, clock format, seconds and the cycle (see [Configuration](#configuration)), then **Save & restart**. Within a few seconds the logs show the place the name was matched to, for example `Location 'Toronto' is Toronto, Ontario, Canada (43.7064, -79.3986)`, and then the first forecast.
+**5. Set it up.** There are two ways:
+- **The time format, units and location:** use the card's **Open** link, then **Settings** on clockscreen's page. Changes apply straight away, with no restart (see [Settings on the preview page](#settings-on-the-preview-page)).
+- **Everything:** use the card's **Config file** editor, which also covers the cycle, refresh rate and port (see [Configuration](#configuration)), then **Save & restart**.
+
+Either way, within a few seconds the place the name was matched to appears, both on clockscreen's page and in the card's **Logs**, for example `Location 'Toronto' is Toronto, Ontario, Canada (43.7064, -79.3986)`, followed by the first forecast.
 
 **If something's wrong:**
 - **conflict:** something else holds port 9300, probably a copy you started by hand. Stop it, and HController starts its own within 5 s.
@@ -137,6 +141,16 @@ cycle:
 
 clockscreen reads its config only at startup, so restart it after a change (the dashboard's **Save & restart**).
 
+### Settings on the preview page
+
+The **Settings** section of clockscreen's own page (`http://<machine>:9300/`, or the **Open** link on HController's card) changes three things without a restart:
+
+- **Time:** 12-hour (AM/PM) or 24-hour, and whether to show seconds.
+- **Units:** °C and km/h, or °F and mph. The forecast is fetched again in the new units straight away.
+- **Location:** a place name (narrowed with a region or country after a comma, as above), or `latitude, longitude`, with an optional label for the screens. It's looked up first and only saved if it matches a place; the page then shows what it matched.
+
+These choices are saved in `clockscreen-state.json` next to the config. They **win over `config.yaml`**, through restarts, until you press **Reset to config** beside each one. So if a change in `config.yaml` doesn't seem to take effect, check for a **Reset to config** button on the page. The clock's timezone stays `timezone` from `config.yaml`, even when the weather is for somewhere else.
+
 ## API
 
 | Endpoint | |
@@ -147,6 +161,10 @@ clockscreen reads its config only at startup, so restart it after a change (the 
 | `GET /screen` | which screen is on, why (`cycle` or `show`), for how much longer, and the data it shows |
 | `GET /weather` | the whole forecast (`null` until the first fetch) |
 | `POST /control/show` | `{"screen": "hourly"}` holds that screen for 30 s; `{"screen": null}` goes back to the cycle |
+| `GET /control/settings` | the time format, units and location in use, the matched place, and which are saved over `config.yaml` |
+| `PUT /control/clock` | `{"clock": {"format": "24h", "seconds": true}}`; `{"clock": null}` goes back to `config.yaml` |
+| `PUT /control/units` | `{"units": "imperial"}` (or `metric`), then the forecast is fetched again; `null` goes back to `config.yaml` |
+| `PUT /control/location` | `{"location": "Paris, France", "label": null}` or `{"location": "49.28, -123.12"}`; 400 if nothing matches, 502 if the lookup fails; `null` goes back to `config.yaml` |
 | `GET /` | the preview page |
 
 The cycle is worked out from the clock (seconds since 1970, modulo the total dwell), so every request agrees on the screen. A **Show now** on clockscreen's own page also applies to the panel while HController has clockscreen on it.
@@ -166,13 +184,13 @@ The cycle is worked out from the clock (seconds since 1970, modulo the total dwe
 ```
 src/clockscreen/
   config.py            config.yaml models + validation
-  state.py             clockscreen-state.json (the remembered geocoding result)
+  state.py             clockscreen-state.json (geocoding result, preview-page settings)
   weather/client.py    Open-Meteo geocoding + forecast (httpx)
   weather/parsers.py   the only code that reads Open-Meteo's JSON
   weather/codes.py     WMO weather codes -> condition text and icon
   poller.py            keeps the forecast fresh; retries with backoff
   rotation.py          which screen is on (pure function of the time)
-  runtime.py           wires it together; Show now
+  runtime.py           wires it together; preview-page settings, Show now
   render/              fonts (from nhlscreen, plus big clock digits), icons, layouts
   api/app.py           the endpoints; api/preview.html
 tools/render_previews.py

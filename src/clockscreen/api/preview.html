@@ -32,6 +32,35 @@
   dd { margin: 0; color: #ddd; overflow-wrap: anywhere; }
   .err { color: #f77; }
   a { color: #8bf; }
+
+  /* settings */
+  .setting { border-top: 1px solid #262626; padding-top: 12px; margin-top: 12px; }
+  .setting:first-of-type { border-top: 0; padding-top: 0; }
+  .setting-head { display: flex; align-items: center; gap: 12px; min-height: 30px; }
+  h3 { font-size: 11px; margin: 0; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
+  .reset { background: #333; color: #ddd; border: 0; border-radius: 6px; padding: 5px 10px; font: inherit; font-size: 12px;
+           cursor: pointer; margin-left: auto; }
+  .reset:hover { background: #444; }
+  .seg { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .seg label { cursor: pointer; }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg span { display: inline-block; background: #2a2a2a; color: #ccc; border: 1px solid #3a3a3a; border-radius: 6px;
+              padding: 7px 12px; font-size: 13px; }
+  .seg label:hover span { border-color: #555; }
+  .seg input:checked + span { background: #23395d; border-color: #6af; color: #fff; }
+  .seg input:focus-visible + span { outline: 2px solid #6af; outline-offset: 2px; }
+  .check { display: inline-flex; align-items: center; gap: 6px; margin: 10px 0 0 4px; color: #ccc; cursor: pointer; }
+  .fields { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-top: 6px; }
+  @media (max-width: 640px) { .fields { grid-template-columns: 1fr; } }
+  .fields label { display: flex; flex-direction: column; gap: 4px; color: #aaa; font-size: 12px; min-width: 0; }
+  .fields input { background: #111; color: #eee; border: 1px solid #333; border-radius: 6px; padding: 8px 10px;
+                  font: inherit; min-width: 0; }
+  .fields input:focus { outline: 2px solid #6af; outline-offset: 0; border-color: transparent; }
+  .save { background: #2f5fb0; color: #fff; border: 0; border-radius: 6px; padding: 8px 14px; font: inherit; cursor: pointer; }
+  .save:hover { background: #3a6fc8; }
+  .save:disabled { opacity: .6; cursor: progress; }
+  .matched { color: #aaa; font-size: 13px; margin-top: 8px; min-height: 1.4em; }
+  .busy { cursor: progress; }
 </style>
 </head>
 <body>
@@ -55,15 +84,63 @@
       HController has this app on it), then the cycle carries on.</p>
   </section>
 
+  <section class="box" aria-labelledby="settings-label" id="settings">
+    <h2 id="settings-label">Settings</h2>
+
+    <div class="setting">
+      <div class="setting-head">
+        <h3 id="time-label">Time</h3>
+        <button class="reset" id="resetClock" type="button" hidden>Reset to config</button>
+      </div>
+      <div class="seg" role="radiogroup" aria-labelledby="time-label">
+        <label><input type="radio" name="format" value="12h"><span>12-hour (AM/PM)</span></label>
+        <label><input type="radio" name="format" value="24h"><span>24-hour</span></label>
+      </div>
+      <label class="check"><input type="checkbox" id="seconds"> Show seconds</label>
+    </div>
+
+    <div class="setting">
+      <div class="setting-head">
+        <h3 id="units-label">Units</h3>
+        <button class="reset" id="resetUnits" type="button" hidden>Reset to config</button>
+      </div>
+      <div class="seg" role="radiogroup" aria-labelledby="units-label">
+        <label><input type="radio" name="units" value="metric"><span>°C, km/h</span></label>
+        <label><input type="radio" name="units" value="imperial"><span>°F, mph</span></label>
+      </div>
+    </div>
+
+    <div class="setting">
+      <div class="setting-head">
+        <h3>Location</h3>
+        <button class="reset" id="resetLocation" type="button" hidden>Reset to config</button>
+      </div>
+      <form id="locationForm" class="fields" novalidate>
+        <label>Place
+          <input id="locationText" autocomplete="off" placeholder="City, region or country, or latitude, longitude">
+        </label>
+        <label>Label on screen (optional)
+          <input id="locationLabel" autocomplete="off" placeholder="the place's name">
+        </label>
+        <button class="save" id="saveLocation" type="submit">Set location</button>
+      </form>
+      <div class="matched" id="matched" aria-live="polite"></div>
+    </div>
+
+    <div class="msg" id="settingsMsg" role="status" aria-live="polite"></div>
+    <p class="hint">Changes apply straight away. They're saved by clockscreen and win over <code>config.yaml</code>
+      (which HController's dashboard edits) until you press <b>Reset to config</b>. Narrow a place down with a region
+      or country after a comma: <i>Portland, OR</i>, <i>London, Ontario</i>. US ZIP codes work; Canadian postal codes
+      don't, so use the city or latitude, longitude.</p>
+  </section>
+
   <section class="box" aria-labelledby="weather-label">
     <h2 id="weather-label">Weather</h2>
     <dl>
-      <dt>Location</dt><dd id="location">…</dd>
       <dt>Updated</dt><dd id="updated">…</dd>
       <dt>Problem</dt><dd id="problem">none</dd>
     </dl>
-    <p class="hint">Location, units, the clock format and the cycle are set in <code>config.yaml</code> (also editable
-      from HController's dashboard). Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0).</p>
+    <p class="hint">Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0).</p>
   </section>
 </div>
 <script>
@@ -155,7 +232,7 @@ function ago(iso) {
 async function healthLoop() {
   try {
     const h = await (await fetch('/health', { cache: 'no-store' })).json();
-    $('location').textContent = h.location || (h.last_error ? 'not found yet' : 'looking it up…');
+    showMatched(h.location, h.last_error);
     $('updated').textContent = h.forecast_fetched_at
       ? ago(h.forecast_fetched_at) + (h.forecast_fresh ? '' : ' (too old: the weather screens are skipped)')
       : 'not yet (the cycle shows only the clock until it arrives)';
@@ -185,9 +262,97 @@ $('showNow').addEventListener('click', async (ev) => {
   }
 });
 
+// ------------------------------------------------------------------ settings
+
+const FORMATS = { '12h': '12-hour', '24h': '24-hour' };
+const UNITS = { metric: '°C', imperial: '°F' };
+let settingsBusy = false, locationDirty = false;
+
+function settingsMsg(text, isError = false) {
+  $('settingsMsg').className = isError ? 'msg err' : 'msg';
+  $('settingsMsg').textContent = text;
+}
+
+function showMatched(place, error) {
+  $('matched').textContent = place ? `Weather for ${place}` : (error ? `Not found yet: ${error}` : 'Looking it up…');
+}
+
+function showSettings(st) {
+  document.querySelectorAll('input[name=format]').forEach((r) => { r.checked = r.value === st.clock.format; });
+  $('seconds').checked = st.clock.seconds;
+  document.querySelectorAll('input[name=units]').forEach((r) => { r.checked = r.value === st.units; });
+  if (!locationDirty) {
+    $('locationText').value = st.location.text;
+    $('locationLabel').value = st.location.label || '';
+  }
+  const cf = st.config_file;
+  $('resetClock').hidden = !st.saved.clock;
+  $('resetClock').textContent = `Reset to config (${FORMATS[cf.clock.format]}${cf.clock.seconds ? ', seconds' : ''})`;
+  $('resetUnits').hidden = !st.saved.units;
+  $('resetUnits').textContent = `Reset to config (${UNITS[cf.units]})`;
+  $('resetLocation').hidden = !st.saved.location;
+  $('resetLocation').textContent = `Reset to config (${cf.location})`;
+  showMatched(st.place, st.last_error);
+}
+
+async function loadSettings() {
+  try { showSettings(await (await fetch('/control/settings', { cache: 'no-store' })).json()); } catch (e) { /* restarting */ }
+}
+
+async function putSetting(path, body, pending, done) {
+  if (settingsBusy) return;
+  settingsBusy = true;
+  $('settings').classList.add('busy');
+  $('saveLocation').disabled = true;
+  settingsMsg(pending);
+  try {
+    const r = await fetch(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const st = await r.json();
+    if (!r.ok) throw new Error(st.detail || r.statusText);
+    if (path === '/control/location') locationDirty = false;
+    showSettings(st);
+    settingsMsg(st.last_error ? `${done}, but the forecast didn't load: ${st.last_error}` : done, !!st.last_error);
+  } catch (e) {
+    settingsMsg(e.message, true);
+    loadSettings();  // put the controls back to what's really in use
+  } finally {
+    settingsBusy = false;
+    $('settings').classList.remove('busy');
+    $('saveLocation').disabled = false;
+  }
+}
+
+function putClock() {
+  const format = document.querySelector('input[name=format]:checked').value, seconds = $('seconds').checked;
+  putSetting('/control/clock', { clock: { format, seconds } }, 'Saving…',
+             `Clock: ${FORMATS[format]}${seconds ? ' with seconds' : ''}`);
+}
+
+document.querySelectorAll('input[name=format]').forEach((r) => r.addEventListener('change', putClock));
+$('seconds').addEventListener('change', putClock);
+document.querySelectorAll('input[name=units]').forEach((r) => r.addEventListener('change', () =>
+  putSetting('/control/units', { units: r.value }, `Fetching the forecast in ${UNITS[r.value]}…`, `Units: ${UNITS[r.value]}`)));
+
+['locationText', 'locationLabel'].forEach((id) => $(id).addEventListener('input', () => { locationDirty = true; }));
+$('locationForm').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const location = $('locationText').value.trim(), label = $('locationLabel').value.trim() || null;
+  if (!location) { settingsMsg('Enter a place name, or latitude, longitude', true); return; }
+  putSetting('/control/location', { location, label }, `Looking up ${location}…`, 'Location saved');
+});
+
+$('resetClock').addEventListener('click', () => putSetting('/control/clock', { clock: null }, 'Saving…', 'Clock: back to config.yaml'));
+$('resetUnits').addEventListener('click', () =>
+  putSetting('/control/units', { units: null }, 'Fetching the forecast…', 'Units: back to config.yaml'));
+$('resetLocation').addEventListener('click', () => {
+  locationDirty = false;
+  putSetting('/control/location', { location: null }, 'Fetching the forecast…', 'Location: back to config.yaml');
+});
+
 frameLoop();
 screenLoop();
 healthLoop();
+loadSettings();
 tick();
 </script>
 </body>

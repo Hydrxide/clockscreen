@@ -119,7 +119,7 @@ def test_every_screen_renders_all_day(forecast):
     for hour in range(24):
         now = datetime(2026, 10, 19, hour, 30, tzinfo=TZ)
         for screen in ("clock", "current", "hourly", "daily"):
-            for settings in (Settings(), Settings(clock_format="24h", seconds=True, units="imperial", label="X")):
+            for settings in (Settings(), Settings(clock_format="24h", seconds=True, label="X")):
                 frame = render(screen, now, forecast, settings)
                 assert len(frame.to_bytes()) == WIDTH * HEIGHT * 3
 

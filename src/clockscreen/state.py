@@ -1,4 +1,6 @@
-"""clockscreen-state.json: what the app remembers between runs (the geocoding result).
+"""clockscreen-state.json: what the app remembers between runs.
+
+The geocoding result, and the clock / units / location chosen on the preview page.
 
 One key per entry. Writes go to a temporary file that replaces the old one, so a stop
 mid-write never leaves a half-written file.
@@ -29,7 +31,11 @@ class State:
         return self._data.get(key, default)
 
     def set(self, key: str, value: Any) -> None:
-        self._data[key] = value
+        """Remember ``value`` under ``key``; None forgets the key."""
+        if value is None:
+            self._data.pop(key, None)
+        else:
+            self._data[key] = value
         if self.path is None:
             return
         tmp = self.path.with_name(self.path.name + ".tmp")

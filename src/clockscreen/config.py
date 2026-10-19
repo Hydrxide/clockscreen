@@ -10,6 +10,7 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 ScreenKind = Literal["clock", "current", "hourly", "daily"]
+Units = Literal["metric", "imperial"]
 WEATHER_SCREENS: frozenset[str] = frozenset({"current", "hourly", "daily"})
 
 
@@ -63,7 +64,7 @@ class Config(BaseModel):
     timezone: str = "America/Toronto"
     server: ServerConfig = Field(default_factory=ServerConfig)
     location: LocationConfig = Field(default_factory=LocationConfig)
-    units: Literal["metric", "imperial"] = "metric"
+    units: Units = "metric"
     clock: ClockConfig = Field(default_factory=ClockConfig)
     weather: WeatherConfig = Field(default_factory=WeatherConfig)
     cycle: list[CycleEntry] = Field(
