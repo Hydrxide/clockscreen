@@ -35,7 +35,5 @@ clockscreen = ["api/*.html"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-filterwarnings = [
-    # Starlette's TestClient warns about its httpx usage; nothing to act on here.
-    "ignore::DeprecationWarning:starlette.*",
-]
+# Starlette's TestClient warns about its httpx usage; nothing to act on here (as in HController).
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>clockscreen</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: #111; color: #ddd; font: 14px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 16px; margin: 0 0 12px; color: #999; font-weight: 500; }
+  h2 { font-size: 15px; margin: 0; color: #eee; font-weight: 600; }
+  .wrap { max-width: 900px; }
+  .panel { background: #000; border: 6px solid #222; border-radius: 6px; padding: 6px; line-height: 0; }
+  .panel canvas { width: 100%; height: auto; aspect-ratio: 2 / 1; display: block; }
+  .meta { color: #777; font-size: 12px; margin-top: 6px; }
+  .bar { height: 6px; background: #333; margin-top: 8px; border-radius: 3px; overflow: hidden; }
+  .bar span { display: block; height: 100%; background: #6af; width: 0; }
+  .status { float: right; font-size: 12px; }
+  .box { background: #1a1a1a; border-radius: 8px; padding: 12px 14px 14px; margin-top: 16px; }
+  .shownow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .shownow button { background: #2a2a2a; color: #eee; border: 1px solid #3a3a3a; border-radius: 6px; padding: 7px 11px;
+                    font: inherit; font-size: 13px; cursor: pointer; }
+  .shownow button:hover { background: #353535; border-color: #555; }
+  .shownow button:focus-visible { outline: 2px solid #6af; outline-offset: 2px; }
+  .shownow button[aria-pressed="true"] { border-color: #6af; }
+  .msg { min-height: 1.4em; margin-top: 10px; color: #8c8; font-size: 13px; }
+  .msg.err { color: #f77; }
+  .hint { color: #777; font-size: 12px; margin: 8px 0 0; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 10px 0 0; font-size: 13px; }
+  dt { color: #888; }
+  dd { margin: 0; color: #ddd; overflow-wrap: anywhere; }
+  .err { color: #f77; }
+  a { color: #8bf; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>clockscreen · panel preview <span class="status" id="status">connecting…</span></h1>
+  <div class="panel"><canvas id="led" width="768" height="384" aria-label="LED panel preview"></canvas></div>
+  <div class="bar"><span id="dwell"></span></div>
+  <div class="meta" id="meta"></div>
+
+  <section class="box" aria-labelledby="shownow-label">
+    <h2 id="shownow-label">Show now</h2>
+    <div class="shownow" id="showNow">
+      <button type="button" data-screen="clock">Clock</button>
+      <button type="button" data-screen="current">Current conditions</button>
+      <button type="button" data-screen="hourly">Next hours</button>
+      <button type="button" data-screen="daily">Next days</button>
+      <button type="button" data-screen="">Resume cycle</button>
+    </div>
+    <div class="msg" id="showMsg" role="status" aria-live="polite"></div>
+    <p class="hint">Holds that screen for <span id="holdSeconds">30</span> s on this app's frames (and on the LED panel, if
+      HController has this app on it), then the cycle carries on.</p>
+  </section>
+
+  <section class="box" aria-labelledby="weather-label">
+    <h2 id="weather-label">Weather</h2>
+    <dl>
+      <dt>Location</dt><dd id="location">…</dd>
+      <dt>Updated</dt><dd id="updated">…</dd>
+      <dt>Problem</dt><dd id="problem">none</dd>
+    </dl>
+    <p class="hint">Location, units, the clock format and the cycle are set in <code>config.yaml</code> (also editable
+      from HController's dashboard). Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0).</p>
+  </section>
+</div>
+<script>
+const $ = (id) => document.getElementById(id);
+
+// ------------------------------------------------------------------ panel preview
+
+// The backend renders each frame exactly as the LED panel will show it
+// (GET /render/frame: width*height RGB bytes); this draws it as LED dots.
+const UNLIT = '#161616';
+let frameSize = null;
+
+function drawFrame(bytes, w, h) {
+  const canvas = $('led');
+  const pitch = Math.max(2, Math.floor(1536 / w));  // fixed-resolution backing store
+  if (canvas.width !== w * pitch) { canvas.width = w * pitch; canvas.height = h * pitch; }
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const r = pitch * 0.42;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 3, red = bytes[i], green = bytes[i + 1], blue = bytes[i + 2];
+      ctx.fillStyle = red | green | blue ? `rgb(${red},${green},${blue})` : UNLIT;
+      ctx.beginPath();
+      ctx.arc(x * pitch + pitch / 2, y * pitch + pitch / 2, r, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+  }
+}
+
+async function frameLoop() {
+  try {
+    const r = await fetch('/render/frame', { cache: 'no-store' });
+    if (r.ok) {
+      const w = +r.headers.get('X-Width'), h = +r.headers.get('X-Height');
+      frameSize = `${w}×${h}`;
+      drawFrame(new Uint8Array(await r.arrayBuffer()), w, h);
+    }
+  } catch (e) { /* app restarting; keep the last frame */ }
+  setTimeout(frameLoop, 200);
+}
+
+// ------------------------------------------------------------------ what's on
+
+const NAMES = { clock: 'Clock', current: 'Current conditions', hourly: 'Next hours', daily: 'Next days' };
+let shown = null;  // {screen, source, total, endsAt}
+
+function dwellFor(s) {
+  if (s.source === 'show') return s.show_now_seconds;
+  const entry = s.cycle.find((e) => e.screen === s.screen);
+  return entry ? entry.dwell : s.seconds_left;
+}
+
+async function screenLoop() {
+  try {
+    const r = await fetch('/screen', { cache: 'no-store' });
+    const s = await r.json();
+    shown = { screen: s.screen, source: s.source, total: dwellFor(s), endsAt: Date.now() + s.seconds_left * 1000 };
+    $('holdSeconds').textContent = s.show_now_seconds;
+    $('meta').textContent = `${NAMES[s.screen] || s.screen} · ${s.source === 'show' ? 'Show now' : 'cycle'}` +
+      (frameSize ? ` · ${frameSize} LEDs` : '');
+    document.querySelectorAll('#showNow button').forEach((b) =>
+      b.setAttribute('aria-pressed', String(s.source === 'show' && b.dataset.screen === s.screen)));
+    $('status').textContent = 'live';
+  } catch (e) {
+    $('status').textContent = 'reconnecting…';
+  }
+  setTimeout(screenLoop, 1000);
+}
+
+function tick() {
+  if (shown) {
+    const left = Math.max(0, shown.endsAt - Date.now()) / 1000;
+    $('dwell').style.width = (100 * (1 - left / shown.total)) + '%';
+  }
+  requestAnimationFrame(tick);
+}
+
+// ------------------------------------------------------------------ weather
+
+function ago(iso) {
+  const s = Math.round((Date.now() - new Date(iso)) / 1000);
+  if (s < 90) return `${s} s ago`;
+  if (s < 5400) return `${Math.round(s / 60)} min ago`;
+  return `${(s / 3600).toFixed(1)} h ago`;
+}
+
+async function healthLoop() {
+  try {
+    const h = await (await fetch('/health', { cache: 'no-store' })).json();
+    $('location').textContent = h.location || (h.last_error ? 'not found yet' : 'looking it up…');
+    $('updated').textContent = h.forecast_fetched_at
+      ? ago(h.forecast_fetched_at) + (h.forecast_fresh ? '' : ' (too old: the weather screens are skipped)')
+      : 'not yet (the cycle shows only the clock until it arrives)';
+    $('problem').textContent = h.last_error || 'none';
+    $('problem').className = h.last_error ? 'err' : '';
+  } catch (e) { /* app restarting */ }
+  setTimeout(healthLoop, 5000);
+}
+
+// ------------------------------------------------------------------ show now
+
+$('showNow').addEventListener('click', async (ev) => {
+  const button = ev.target.closest('button');
+  if (!button) return;
+  const screen = button.dataset.screen || null;
+  try {
+    const r = await fetch('/control/show', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ screen }),
+    });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.detail || r.statusText);
+    $('showMsg').className = 'msg';
+    $('showMsg').textContent = screen ? `Showing ${NAMES[screen]} for ${Math.round(body.seconds_left)} s` : 'Back to the cycle';
+  } catch (e) {
+    $('showMsg').className = 'msg err';
+    $('showMsg').textContent = `Couldn't switch: ${e.message}`;
+  }
+});
+
+frameLoop();
+screenLoop();
+healthLoop();
+tick();
+</script>
+</body>
+</html>
