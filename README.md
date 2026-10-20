@@ -11,33 +11,80 @@ A clock and local weather for a 128 × 64 LED panel. It cycles between the time 
 
 Weather comes from [Open-Meteo](https://open-meteo.com/): free, no API key or sign-up, and it covers the whole world. Until the first forecast arrives, or if the forecast is more than 3 hours old, the panel shows only the clock.
 
-## Quick start
+This README is a setup guide for a Raspberry Pi, a Mac, a Linux PC or a Windows PC. A browser preview shows exactly what the panel shows, so you can try it without any LED hardware.
+
+**Contents:** [What you need](#what-you-need) · [1. Install](#1-install) · [2. Try it on its own](#2-try-it-on-its-own) · [Running it on HController](#running-it-on-hcontroller) · [Configuration](#configuration) · [Settings on the preview page](#settings-on-the-preview-page) · [Troubleshooting](#troubleshooting) · [For developers](#for-developers)
+
+## What you need
+
+- **Python 3.11 or newer** and **git**.
+- An internet connection for the forecast.
+
+| | Install Python and git | Check |
+|---|---|---|
+| **Raspberry Pi OS, Debian, Ubuntu** | `sudo apt update && sudo apt install -y git python3 python3-venv` | `python3 --version` |
+| **macOS** | `xcode-select --install` for git. Python from [python.org](https://www.python.org/downloads/macos/) or `brew install python@3.13` | `python3 --version` |
+| **Windows** | `winget install Git.Git` and `winget install Python.Python.3.13` in PowerShell, or the installers from [git-scm.com](https://git-scm.com/download/win) and [python.org](https://www.python.org/downloads/windows/). Then open a new PowerShell window. | `py --version` |
+
+If `python3 --version` shows something older than 3.11, call the newer Python by its full name below, for example `python3.13 -m venv .venv`. The `python3` that comes with macOS is 3.9, and Ubuntu 22.04's is 3.10; both are too old.
+
+## 1. Install
+
+Install it in your home folder, so it ends up at `~/clockscreen`. If you use HController, install it on the machine that runs HController, beside `~/HController`.
+
+**macOS, Linux and the Pi:**
 
 ```bash
-git clone https://github.com/Hydrxide/clockscreen.git ~/clockscreen && cd ~/clockscreen
+cd ~
+git clone https://github.com/Hydrxide/clockscreen.git
+cd clockscreen
 python3 -m venv .venv
 .venv/bin/pip install -e .
-cp config.example.yaml config.yaml     # optional: it runs on the defaults without one
-.venv/bin/python -m clockscreen        # preview at http://127.0.0.1:9300/
 ```
 
-On Windows, use `.venv\Scripts\` in place of `.venv/bin/`. Python 3.11 or newer is required.
+**Windows (PowerShell):**
 
-The preview page draws exactly what the panel shows, as LED dots. It also has **Show now** buttons, the forecast's status, and **Settings** for the time format, timezone, units and location (see [Settings on the preview page](#settings-on-the-preview-page)). To use it as a module, stop it again (Ctrl+C) and let HController run it. HController won't start a second copy while this one holds the port.
+```powershell
+cd ~
+git clone https://github.com/Hydrxide/clockscreen.git
+cd clockscreen
+py -m venv .venv
+.venv\Scripts\pip install -e .
+```
+
+Use PowerShell rather than the old Command Prompt for the Windows commands in this guide. There's no need to "activate" the venv: the commands call its Python directly.
+
+There's no need to create `config.yaml`. Until it exists, clockscreen runs on its defaults (Toronto, °C, 12-hour clock), and HController's config editor starts from `config.example.yaml`. The location, timezone, units and time format can all be set from the preview page.
+
+## 2. Try it on its own
+
+**macOS, Linux and the Pi:**
+
+```bash
+cd ~/clockscreen
+.venv/bin/python -m clockscreen
+```
+
+**Windows:**
+
+```powershell
+cd ~\clockscreen
+.venv\Scripts\python.exe -m clockscreen
+```
+
+Then open **http://127.0.0.1:9300/** in a browser on the same machine. It keeps running until you press **Ctrl+C**.
+
+On a Pi without a screen, start it with `--host 0.0.0.0` and open **http://raspberrypi.local:9300/** from another device instead.
+
+The preview page draws exactly what the panel shows, as LED dots. It also has **Show now** buttons, the forecast's status, and **Settings** for the time format, timezone, units and location (see [Settings on the preview page](#settings-on-the-preview-page)). Set your location there now: within a few seconds the page shows the place it matched, and the weather screens switch to its forecast.
+
+To use it as a module, stop it again (Ctrl+C) and let HController run it. HController won't start a second copy while this one holds the port.
 
 ## Running it on HController
 
 These steps set it up from scratch on the machine that runs HController (a Raspberry Pi, or a Mac or PC for testing). They assume HController is already installed and working; see its README.
 
-**1. Install clockscreen next to HController.**
-
-```bash
-git clone https://github.com/Hydrxide/clockscreen.git ~/clockscreen && cd ~/clockscreen
-python3 -m venv .venv
-.venv/bin/pip install -e .
-```
-
-There's no need to create `config.yaml` now. Until it exists, HController's config editor starts from `config.example.yaml`, and clockscreen runs on its defaults (Toronto, °C, 12-hour clock).
+**1. Install clockscreen next to HController,** as in [1. Install](#1-install), so it's at `~/clockscreen`.
 
 **2. Register it.** Paste this block under `modules:` in HController's `hcontroller.yaml`:
 
@@ -57,9 +104,15 @@ There's no need to create `config.yaml` now. Until it exists, HController's conf
     restart: on-failure
 ```
 
-clockscreen doesn't log each frame request, so it needs no `log_ignore`. If you cloned somewhere other than `~/clockscreen`, change `cwd`.
+The same block works on Windows: HController finds the venv's `.venv\Scripts\python.exe` there.
 
-**3. Restart HController,** which reads `hcontroller.yaml` only at startup: `sudo systemctl restart hcontroller` on a Pi, or stop and start `.venv/bin/python -m hcontroller` elsewhere. Then on the dashboard (`http://<that machine>:1630/`), the **Clock & Weather** card should go from **starting** to **healthy** within a few seconds.
+clockscreen doesn't log each frame request, so it needs no `log_ignore`. If you cloned somewhere other than `~/clockscreen`, change `cwd` (on Windows, `~` is `C:\Users\<you>`).
+
+**3. Restart HController,** which reads `hcontroller.yaml` only at startup:
+- **Pi / Linux with its service:** `sudo systemctl restart hcontroller`.
+- **Started in a terminal:** press Ctrl+C there, then start it again (`.venv/bin/python -m hcontroller`, or `.venv\Scripts\python.exe -m hcontroller` on Windows).
+
+Then on the dashboard (`http://<that machine>:1630/`), the **Clock & Weather** card should go from **starting** to **healthy** within a few seconds.
 
 **4. Put it on the panel.** To try it straight away, press **Show now → Clock & Weather** in the LED panel section. To keep it there, add a window in the dashboard's **Schedule**, or in `hcontroller.yaml` under `display:`. For example, to make it what the panel shows whenever no other window applies:
 
@@ -84,16 +137,11 @@ Quote the times. `days` can also be `weekdays`, `weekends` or a list like `[sat,
 
 Either way, within a few seconds the place the name was matched to appears, both on clockscreen's page and in the card's **Logs**, for example `Location 'Toronto' is Toronto, Ontario, Canada (43.7064, -79.3986)`, followed by the first forecast.
 
-**If something's wrong:**
-- **conflict:** something else holds port 9300, probably a copy you started by hand. Stop it, and HController starts its own within 5 s.
-- **Changing the port:** set it in both places: `server.port` in clockscreen's config, and the port in the module's `url`. Then restart HController.
-- **Only the clock shows:** the forecast hasn't arrived yet, or is over 3 hours old. The card's **Logs** show why (no network, a place name with no match), and clockscreen keeps retrying.
-- **The Open link doesn't load from your phone:** set `server: {host: 0.0.0.0}` in clockscreen's config.
-- **Its own systemd unit:** there isn't one, and it doesn't need one, because HController runs it.
+clockscreen has no systemd service of its own, and doesn't need one: HController starts it, including at boot when HController runs as a service.
 
 ## Configuration
 
-Copy `config.example.yaml` to `config.yaml` (or edit it from HController's dashboard). Every key is optional.
+Copy `config.example.yaml` to `config.yaml` (`cp` on macOS and Linux, `copy` on Windows), or edit it from HController's dashboard. Every key is optional.
 
 **Location.** It can be anywhere in the world, given in either of two ways:
 
@@ -154,7 +202,34 @@ These choices are saved in `clockscreen-state.json` next to the config. They **w
 
 **The timezone and the location are separate.** The clock, the time on the current-conditions screen and the hours on the hourly screen all use the timezone, whatever the weather location is. So a board in Toronto can show Paris weather with Toronto time, and the hourly screen's `1PM` means 1 PM in Toronto. Set both if you've moved the board.
 
-## API
+## Troubleshooting
+
+| What you see | What to do |
+|---|---|
+| `ERROR: Package 'clockscreen' requires a different Python` | The venv was made with Python older than 3.11. Delete the `.venv` folder and make it again with a newer Python (see [What you need](#what-you-need)). |
+| `error while attempting to bind on address ('127.0.0.1', 9300)` | Another copy holds port 9300, in another terminal or under HController. Stop one of them. |
+| **conflict** on HController's card | Something else holds port 9300, probably a copy you started by hand. Stop it, and HController starts its own within 5 s. |
+| `.../.venv/bin/python doesn't exist` on the card | clockscreen's venv is missing. Make it with [1. Install](#1-install). |
+| Only the clock shows | The forecast hasn't arrived yet, or is over 3 hours old. The terminal or the card's **Logs** show why (no network, a place name with no match), and clockscreen keeps retrying. |
+| A change in `config.yaml` didn't take effect | Restart clockscreen, and check the preview page for a **Reset to config** button: settings made there win over the file. |
+| The preview page or **Open** link doesn't load from a phone | Set `server: {host: 0.0.0.0}` in clockscreen's config and restart it. The first time, Windows asks whether to allow Python through the firewall: allow it on **private** networks. |
+| Changing the port | Set it in both places: `server.port` in clockscreen's config, and the port in the module's `url`. Then restart HController. |
+
+## For developers
+
+### Testing
+
+```bash
+.venv/bin/pip install -e '.[dev]'
+.venv/bin/pytest -q                                    # offline, recorded Open-Meteo responses, ~1 s
+.venv/bin/python tools/render_previews.py --out previews/   # every screen and worst case as PNGs
+```
+
+On Windows, use `.venv\Scripts\` in place of `.venv/bin/`.
+
+`render_previews.py` uses the recorded Toronto forecast plus made-up extremes: −25°, 104 °F, `12:59:59 PM`, `23:59:59`, long place names and condition text, and every icon by day and by night.
+
+### API
 
 | Endpoint | |
 |---|---|
@@ -173,17 +248,7 @@ These choices are saved in `clockscreen-state.json` next to the config. They **w
 
 The cycle is worked out from the clock (seconds since 1970, modulo the total dwell), so every request agrees on the screen. A **Show now** on clockscreen's own page also applies to the panel while HController has clockscreen on it.
 
-## Testing
-
-```bash
-.venv/bin/pip install -e '.[dev]'
-.venv/bin/pytest -q                                    # offline, recorded Open-Meteo responses, ~1 s
-.venv/bin/python tools/render_previews.py --out previews/   # every screen and worst case as PNGs
-```
-
-`render_previews.py` uses the recorded Toronto forecast plus made-up extremes: −25°, 104 °F, `12:59:59 PM`, `23:59:59`, long place names and condition text, and every icon by day and by night.
-
-## Layout
+### Layout
 
 ```
 src/clockscreen/
