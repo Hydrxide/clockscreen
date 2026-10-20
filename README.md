@@ -1,5 +1,7 @@
 # clockscreen
 
+> This project is not actively maintained, and was created with AI assistance for personal use.
+
 A clock and local weather for a 128 × 64 LED panel. It cycles between the time and three weather screens, and runs as a module of [HController](https://github.com/Hydrxide/HController), the hub that owns the panel and decides which app is on it.
 
 | Screen | Shows |
