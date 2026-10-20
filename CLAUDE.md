@@ -29,7 +29,7 @@ A clock and local weather for the user's 128×64 LED panel, as an **HController 
   - The wind label uses `forecast.units`, so a failed refetch after a units change still shows consistent data.
 - **The clock's timezone is separate from the weather location** (the user picked this over "the clock follows the location", 2026-10-19). `timezone` drives the clock, the hourly labels (converted to `now.tzinfo` at draw time) and the forecast's day boundaries, which are refetched on a change. Names are canonicalised against `zoneinfo.available_timezones()` (`config.canonical_timezone`), because macOS would accept the wrong case and the Pi wouldn't.
 - **Docs:** HController's repo gets no doc changes for this module. The setup instructions live only in this README's "Running it on HController" section, written for an outside user on a fresh machine. `tests/test_docs.py` checks its YAML block against the code.
-- Port 9300, and the repo is private (`Hydrxide/clockscreen`).
+- Port 9300; the repo is `Hydrxide/clockscreen`.
 
 ## Architecture
 

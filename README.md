@@ -13,7 +13,7 @@ Weather comes from [Open-Meteo](https://open-meteo.com/): free, no API key or si
 
 This README is a setup guide for a Raspberry Pi, a Mac, a Linux PC or a Windows PC. A browser preview shows exactly what the panel shows, so you can try it without any LED hardware.
 
-**Contents:** [What you need](#what-you-need) · [1. Install](#1-install) · [2. Try it on its own](#2-try-it-on-its-own) · [Running it on HController](#running-it-on-hcontroller) · [Configuration](#configuration) · [Settings on the preview page](#settings-on-the-preview-page) · [Troubleshooting](#troubleshooting) · [For developers](#for-developers)
+**Contents:** [What you need](#what-you-need) · [1. Install](#1-install) · [2. Try it on its own](#2-try-it-on-its-own) · [Running it on HController](#running-it-on-hcontroller) · [Configuration](#configuration) · [Settings on the preview page](#settings-on-the-preview-page) · [Troubleshooting](#troubleshooting) · [For developers](#for-developers) · [License](#license)
 
 ## What you need
 
@@ -268,3 +268,7 @@ tools/render_previews.py
 ## Weather data
 
 Weather data by [Open-Meteo.com](https://open-meteo.com/), under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The free API is for non-commercial use and allows 10,000 calls a day; clockscreen makes about 100.
+
+## License
+
+MIT; see [LICENSE](LICENSE). The weather data is Open-Meteo's, under its own license (above).
